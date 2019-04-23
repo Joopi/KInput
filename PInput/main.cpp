@@ -230,6 +230,19 @@ bool PInput_ScrollMouse(DWORD PID, std::int32_t X, std::int32_t Y, std::int32_t 
     return Clients[PID]->ScrollMouse(X, Y, Lines);
 }
 
+void PInput_UpdateClientSurface(DWORD PID, bool CopyPixelBuffer) {
+    if (!Clients.count(PID))
+        return;
+    Clients[PID]->KInput->UpdateClientSurfaceInfo(CopyPixelBuffer);
+}
+
+struct ClientSurfaceInfo *PInput_GetClientSurface(DWORD PID)
+{
+    if (!Clients.count(PID))
+        return nullptr;
+    return Clients[PID]->KInput->GetClientSurfaceInfo();
+}
+
 extern "C"
 __declspec(dllexport)
 bool PInput_Delete(DWORD PID)
@@ -240,6 +253,137 @@ bool PInput_Delete(DWORD PID)
         Clients[PID] = nullptr;
         Clients.erase(PID);
         return true;
+    }
+    return false;
+}
+
+/**
+ * EIOS implementation
+ */
+
+typedef DWORD Target;
+
+extern "C"
+__stdcall
+Target EIOS_RequestTarget(char *initargs) {
+    if (initargs != nullptr && strlen(initargs) > 0) {
+        auto pid = static_cast<DWORD>(strtol(initargs, nullptr, 10));
+        if (PInput_Create(pid)) {
+            return pid;
+        }
+    }
+    return 0; //This result signifies a failure
+}
+
+extern "C"
+__stdcall
+void EIOS_ReleaseTarget(Target target) {
+    if (target) {
+        PInput_Delete(target);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_GetTargetDimensions(Target t, int* width, int* height) {
+    if (!t)
+        return;
+    auto Surface = PInput_GetClientSurface(t);
+    PInput_UpdateClientSurface(t, false);
+    *width = Surface->Width;
+    *height = Surface->Height;
+}
+
+extern "C"
+__stdcall
+const union BGRA* EIOS_UpdateImageBufferEx(Target t) {
+    if (t)
+    {
+        ClientSurfaceInfo *Surface = PInput_GetClientSurface(t);
+        PInput_UpdateClientSurface(t, true);
+        return Surface->PixelBuffer;
+    }
+    return nullptr;
+}
+
+extern "C"
+__stdcall
+void EIOS_GetMousePosition(Target t, int* x, int* y) {
+    if (t) {
+        PInput_GetMousePos(t, x, y);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_MoveMouse(Target t, int x, int y) {
+    if (t) {
+        PInput_MoveMouse(t, x, y);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_HoldMouse(Target t, int x, int y, int button) {
+    if (t) {
+        PInput_HoldMouse(t, x, y, button);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_ReleaseMouse(Target t, int x, int y, int button) {
+    if (t) {
+        PInput_ReleaseMouse(t, x, y, button);
+    }
+}
+
+extern "C"
+__stdcall
+bool EIOS_IsMouseHeld(Target t, int button) {
+    if (t) {
+        return PInput_IsMouseButtonDown(t, button);
+    }
+    return false;
+}
+
+extern "C"
+__stdcall
+void EIOS_ScrollMouse(Target t, int x, int y, int lines) {
+    if (t) {
+        PInput_ScrollMouse(t, x, y, lines);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_SendString(Target t, char* str, int keywait, int keymodwait) {
+    if (t) {
+        PInput_SendKeys(t, str, keywait, keymodwait);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_HoldKey(Target t, int key) {
+    if (t) {
+        PInput_PressKey(t, key);
+    }
+}
+
+extern "C"
+__stdcall
+void EIOS_ReleaseKey(Target t, int key) {
+    if (t) {
+        PInput_KeyUp(t, key);
+    }
+}
+
+extern "C"
+__stdcall
+bool EIOS_IsKeyHeld(Target t, int key) {
+    if (t) {
+        return PInput_IsKeyDown(t, key);
     }
     return false;
 }

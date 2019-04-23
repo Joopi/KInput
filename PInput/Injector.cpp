@@ -149,6 +149,25 @@ bool Injector::CallExport(void* DLL, std::string ProcName, void* Data, std::uint
     return Result;
 }
 
+DWORD Injector::CallExport(void* DLL, std::string ProcName)
+{
+    if (!DLL)
+        return 0;
+    DWORD Result = 0;
+    void* Func = GetRemoteProcAddress(DLL, ProcName);
+    if (Func)
+    {
+        HANDLE RemoteThread = CreateRemoteThread(this->ProcessHandle, nullptr, 0, (LPTHREAD_START_ROUTINE)Func, nullptr, 0, nullptr);
+        if (RemoteThread)
+        {
+            WaitForSingleObject(RemoteThread, INFINITE);
+            GetExitCodeThread(RemoteThread, &Result);
+            CloseHandle(RemoteThread);
+        }
+    }
+    return Result;
+}
+
 bool Injector::Free(std::string DLLPath)
 {
     bool Result = false;

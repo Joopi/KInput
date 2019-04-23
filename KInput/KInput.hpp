@@ -9,6 +9,17 @@
 typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
 typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
 
+union BGRA { // Contains pixel info in BGRA format
+    struct { char B, G, R, A; };
+    unsigned int Color;
+};
+
+struct ClientSurfaceInfo {
+    int Width = -1;
+    int Height = -1;
+    const BGRA *PixelBuffer = nullptr; // Contains pixel info in BGRA format
+};
+
 class KInput
 {
     private:
@@ -17,7 +28,7 @@ class KInput
         jobject Client;
         jobject Canvas;
 
-        ptr_GetComponent GetComponent;
+        ptr_GetComponent GetComponent{};
 
         jclass Canvas_Class;
         jmethodID Canvas_DispatchEvent;
@@ -35,6 +46,7 @@ class KInput
         jmethodID MouseWheelEvent_Init;
 
         HWND CanvasUpdate;
+        struct ClientSurfaceInfo *SurfaceInfo;
 
         bool AttachThread(JNIEnv** Thread);
         bool DetachThread(JNIEnv** Thread);
@@ -53,6 +65,8 @@ class KInput
                              std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                              std::int32_t ScrollAmount, std::int32_t WheelRotation);
         void NotifyCanvasUpdate(HWND CanvasHWND);
+        void UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer);
+        struct ClientSurfaceInfo *GetClientSurfaceInfo();
         ~KInput();
 };
 

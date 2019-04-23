@@ -116,8 +116,6 @@ public:
 class PInput
 {
 private:
-    KInputCtrl *KInput;
-
     // Keyboard
     std::set<HeldKey> KeysHeld;
     std::mutex KeysHeldLock;
@@ -139,6 +137,8 @@ private:
     void KeySenderRun();
 
 public:
+    KInputCtrl *KInput;
+
     PInput(DWORD PID, std::string &Path);
 
     // Keyboard

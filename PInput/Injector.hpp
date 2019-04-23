@@ -6,18 +6,18 @@
 
 class Injector
 {
-    private:
+    protected:
         DWORD PID;
         std::map<std::string, void*> Modules;
         HANDLE ProcessHandle;
 
         void* GetRemoteProcAddress(void* DLL, std::string ProcName);
     public:
-        Injector(DWORD PID);
+        explicit Injector(DWORD PID);
         void* Load(std::string DLLPath);
         bool CallExport(void* DLL, std::string ProcName, void* Data, std::uint32_t Size);
         bool CallExport(std::string DLL, std::string ProcName, void* Data, std::uint32_t Size);
-
+        DWORD CallExport(void* DLL, std::string ProcName);
 
         bool Free(std::string DLLPath);
         ~Injector();

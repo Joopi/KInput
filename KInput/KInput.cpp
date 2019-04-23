@@ -33,7 +33,7 @@ static BOOL CALLBACK GetHWNDCurrentPID(HWND WindowHandle, LPARAM lParam)
 
 HWND GetCanvasHWND()
 {
-    HWND CanvasHandle = 0;
+    HWND CanvasHandle = nullptr;
     std::vector<HWND> OSRSWindows;
     EnumWindows(GetHWNDCurrentPID, reinterpret_cast<LPARAM>(&OSRSWindows));
     if (OSRSWindows.size() > 0)
@@ -136,6 +136,18 @@ void KInput::NotifyCanvasUpdate(HWND CanvasHWND)
     this->CanvasUpdate = CanvasHWND;
 }
 
+void KInput::UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer)
+{
+    this->SurfaceInfo->Width = Width;
+    this->SurfaceInfo->Height = Height;
+    this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(PixelBuffer);
+}
+
+struct ClientSurfaceInfo *KInput::GetClientSurfaceInfo()
+{
+    return this->SurfaceInfo;
+}
+
 void KInput::UpdateCanvas(JNIEnv* Thread)
 {
     if (!CanvasUpdate)
@@ -183,14 +195,16 @@ KInput::KInput()
     this->MouseWheelEvent_Class = nullptr;
     this->MouseWheelEvent_Init = nullptr;
     this->CanvasUpdate = nullptr;
+    this->SurfaceInfo = new struct ClientSurfaceInfo();
     this->GrabCanvas();
 }
 
 bool KInput::AttachThread(JNIEnv** Thread)
 {
+    static const JavaVMAttachArgs Args = {JNI_VERSION_1_6, (char*)"AWT-EventQueue-0", nullptr};
     if (this->JVM)
         if (this->JVM->GetEnv((void**)Thread, JNI_VERSION_1_6) == JNI_EDETACHED)
-            this->JVM->AttachCurrentThread((void**)Thread, nullptr);
+            this->JVM->AttachCurrentThread((void**)Thread, (void*)&Args);
     return (*Thread);
 }
 
@@ -423,4 +437,5 @@ KInput::~KInput()
         }
         this->DetachThread(&Thread);
     }
+    delete this->SurfaceInfo;
 }

@@ -29,7 +29,7 @@ OBJDIR_RELEASE = obj\\Release
 DEP_RELEASE = 
 OUT_RELEASE = bin\\Release\\KInput.dll
 
-OBJ_RELEASE = $(OBJDIR_RELEASE)\\KInput.o $(OBJDIR_RELEASE)\\main.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)\\Hooks.o $(OBJDIR_RELEASE)\\KInput.o $(OBJDIR_RELEASE)\\main.o
 
 all: release
 
@@ -45,6 +45,9 @@ release: before_release out_release after_release
 
 out_release: before_release $(OBJ_RELEASE) $(DEP_RELEASE)
 	$(LD) -shared $(LIBDIR_RELEASE) $(OBJ_RELEASE)  -o $(OUT_RELEASE) $(LDFLAGS_RELEASE) $(LIB_RELEASE)
+
+$(OBJDIR_RELEASE)\\Hooks.o: Hooks.cpp
+	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c Hooks.cpp -o $(OBJDIR_RELEASE)\\Hooks.o
 
 $(OBJDIR_RELEASE)\\KInput.o: KInput.cpp
 	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c KInput.cpp -o $(OBJDIR_RELEASE)\\KInput.o

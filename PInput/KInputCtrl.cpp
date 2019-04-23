@@ -15,12 +15,15 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <windows.h>
 #include "KInputCtrl.hpp"
 
 KInputCtrl::KInputCtrl(DWORD PID, std::string Path) : Injector(PID)
 {
     this->FileName = Path + "\\KInput.dll";
     this->DLL = this->Load(FileName);
+    this->SurfaceInfo = new ClientSurfaceInfo();
+    this->CopiedPixelBufferSize = 0;
 }
 
 bool KInputCtrl::FocusEvent(std::int32_t ID)
@@ -29,7 +32,7 @@ bool KInputCtrl::FocusEvent(std::int32_t ID)
     {
         std::int32_t ID;
     };
-    FocusEvent Event;
+    FocusEvent Event{};
     Event.ID = ID;
     return this->CallExport(this->DLL, "KInput_FocusEvent", &Event, sizeof(Event));
 }
@@ -46,7 +49,7 @@ bool KInputCtrl::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modif
         std::uint16_t KeyChar;
         std::int32_t KeyLocation;
     };
-    KeyEvent Event;
+    KeyEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
@@ -70,7 +73,7 @@ bool KInputCtrl::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Mod
         bool PopupTrigger;
         std::int32_t Button;
     };
-    MouseEvent Event;
+    MouseEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
@@ -99,7 +102,7 @@ bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_
         std::int32_t ScrollAmount;
         std::int32_t WheelRotation;
     };
-    MouseWheelEvent Event;
+    MouseWheelEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
@@ -113,7 +116,46 @@ bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_
     return this->CallExport(this->DLL, "KInput_MouseWheelEvent", &Event, sizeof(Event));
 }
 
+void KInputCtrl::UpdateClientSurfaceInfo(bool CopyPixelBuffer)
+{
+    void* RemoteSurfaceInfoAddress = reinterpret_cast<void *>(this->CallExport(this->DLL, "KInput_GetClientSurfaceInfo"));
+    if (!RemoteSurfaceInfoAddress) {
+        return;
+    }
+
+    // Read the SurfaceInfo from KInput
+    ClientSurfaceInfo RemoteClientSurfaceInfo{};
+    if (!ReadProcessMemory(this->ProcessHandle, (LPCVOID) RemoteSurfaceInfoAddress, &RemoteClientSurfaceInfo, sizeof(ClientSurfaceInfo), nullptr)) {
+        return;
+    }
+
+    // Update the dimensions
+    this->SurfaceInfo->Width = RemoteClientSurfaceInfo.Width;
+    this->SurfaceInfo->Height = RemoteClientSurfaceInfo.Height;
+
+    if (CopyPixelBuffer) {
+        // Allocate new memory or resize the existing one in-case the pixel buffer is bigger!
+        if (this->SurfaceInfo->PixelBuffer == nullptr) {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(malloc(RemoteClientSurfaceInfo.GetPixelBufferSize()));
+        } else if (CopiedPixelBufferSize != RemoteClientSurfaceInfo.GetPixelBufferSize())
+        {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(realloc((void*) this->SurfaceInfo->PixelBuffer, RemoteClientSurfaceInfo.GetPixelBufferSize()));
+        }
+        // Update the copied buffer size
+        CopiedPixelBufferSize = RemoteClientSurfaceInfo.GetPixelBufferSize();
+        // Read the remote pixel buffer into the local pixel buffer
+        ReadProcessMemory(this->ProcessHandle, RemoteClientSurfaceInfo.PixelBuffer, (void*) this->SurfaceInfo->PixelBuffer, RemoteClientSurfaceInfo.GetPixelBufferSize(), nullptr);
+    }
+}
+
+ClientSurfaceInfo *KInputCtrl::GetClientSurfaceInfo()
+{
+    return this->SurfaceInfo;
+}
+
 KInputCtrl::~KInputCtrl()
 {
+    delete this->SurfaceInfo->PixelBuffer;
+    delete this->SurfaceInfo;
     this->Free(this->FileName);
 }
