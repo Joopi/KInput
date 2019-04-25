@@ -15,7 +15,7 @@ struct ClientSurfaceInfo {
 
 public:
     std::int64_t GetPixelBufferSize() {
-        return Width * Height * sizeof(union BGRA);
+        return Width * Height * sizeof(BGRA);
     }
 };
 

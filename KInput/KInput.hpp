@@ -5,6 +5,7 @@
 #include <jni.h>
 #include <cstdint>
 #include <mutex>
+#include <condition_variable>
 
 typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
 typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
@@ -18,6 +19,11 @@ struct ClientSurfaceInfo {
     int Width = -1;
     int Height = -1;
     const BGRA *PixelBuffer = nullptr; // Contains pixel info in BGRA format
+
+public:
+    std::int64_t GetPixelBufferSize() {
+        return Width * Height * sizeof(BGRA);
+    }
 };
 
 class KInput
@@ -47,6 +53,10 @@ class KInput
 
         HWND CanvasUpdate;
         struct ClientSurfaceInfo *SurfaceInfo;
+        bool ShouldUpdatePixelBuffer;
+        size_t CopiedPixelBufferSize;
+        std::mutex OnFrameUpdateMutex;
+        std::condition_variable OnFrameUpdate;
 
         bool AttachThread(JNIEnv** Thread);
         bool DetachThread(JNIEnv** Thread);
@@ -66,7 +76,8 @@ class KInput
                              std::int32_t ScrollAmount, std::int32_t WheelRotation);
         void NotifyCanvasUpdate(HWND CanvasHWND);
         void UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer);
-        struct ClientSurfaceInfo *GetClientSurfaceInfo();
+        bool RequestPixelBufferUpdate();
+        ClientSurfaceInfo *GetClientSurfaceInfo();
         ~KInput();
 };
 

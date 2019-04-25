@@ -143,6 +143,14 @@ void KInputCtrl::UpdateClientSurfaceInfo(bool CopyPixelBuffer)
         }
         // Update the copied buffer size
         CopiedPixelBufferSize = RemoteClientSurfaceInfo.GetPixelBufferSize();
+
+        // Request for an update and wait for the next frame!
+        bool Requested = this->CallExport(this->DLL, "KInput_RequestPixelBufferUpdate");
+        if (!Requested)
+        {
+            return;
+        }
+
         // Read the remote pixel buffer into the local pixel buffer
         ReadProcessMemory(this->ProcessHandle, RemoteClientSurfaceInfo.PixelBuffer, (void*) this->SurfaceInfo->PixelBuffer, RemoteClientSurfaceInfo.GetPixelBufferSize(), nullptr);
     }

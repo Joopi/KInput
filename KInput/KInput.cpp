@@ -140,10 +140,36 @@ void KInput::UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer)
 {
     this->SurfaceInfo->Width = Width;
     this->SurfaceInfo->Height = Height;
-    this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(PixelBuffer);
+
+    // If someone is waiting for a pixel buffer update, do IT!
+    if (this->ShouldUpdatePixelBuffer) {
+        size_t PixelCount = Width * Height * sizeof(BGRA);
+        // Allocate new memory or resize the existing one in-case the pixel buffer is bigger!
+        if (this->SurfaceInfo->PixelBuffer == nullptr) {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(malloc(PixelCount));
+        } else if (CopiedPixelBufferSize != PixelCount)
+        {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(realloc((void*) this->SurfaceInfo->PixelBuffer, PixelCount));
+        }
+        // Update the copied buffer size
+        CopiedPixelBufferSize = PixelCount;
+
+        // Copy the buffer to our safe location
+        memcpy((void *) this->SurfaceInfo->PixelBuffer, PixelBuffer, PixelCount);
+        this->ShouldUpdatePixelBuffer = false;
+        OnFrameUpdate.notify_all();
+    }
 }
 
-struct ClientSurfaceInfo *KInput::GetClientSurfaceInfo()
+bool KInput::RequestPixelBufferUpdate()
+{
+    std::unique_lock<std::mutex> Lock(OnFrameUpdateMutex);
+    this->ShouldUpdatePixelBuffer = true;
+    OnFrameUpdate.wait(Lock, [&]{return !this->ShouldUpdatePixelBuffer;});
+    return true;
+}
+
+ClientSurfaceInfo *KInput::GetClientSurfaceInfo()
 {
     return this->SurfaceInfo;
 }
@@ -196,6 +222,8 @@ KInput::KInput()
     this->MouseWheelEvent_Init = nullptr;
     this->CanvasUpdate = nullptr;
     this->SurfaceInfo = new struct ClientSurfaceInfo();
+    this->ShouldUpdatePixelBuffer = false;
+    this->CopiedPixelBufferSize = 0;
     this->GrabCanvas();
 }
 
@@ -437,5 +465,6 @@ KInput::~KInput()
         }
         this->DetachThread(&Thread);
     }
+    delete this->SurfaceInfo->PixelBuffer;
     delete this->SurfaceInfo;
 }

@@ -112,6 +112,15 @@ struct ClientSurfaceInfo* KInput_GetClientSurfaceInfo()
     return Input->GetClientSurfaceInfo();
 }
 
+extern "C"
+__declspec(dllexport)
+bool KInput_RequestPixelBufferUpdate()
+{
+    if (!Input)
+        return false;
+    return Input->RequestPixelBufferUpdate();
+}
+
 bool __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     switch (fdwReason)
