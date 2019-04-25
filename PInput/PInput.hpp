@@ -38,6 +38,8 @@ typedef enum InputEvents
 {
     ALT_MASK = 8,
     SHIFT_DOWN_MASK = 64,
+    CTRL_DOWN_MASK = 128,
+    ALT_DOWN_MASK = 512,
     SHIFT_MASK = 1,
     BUTTON1_DOWN_MASK = 1024,
     BUTTON2_DOWN_MASK = 2048,
@@ -121,7 +123,6 @@ private:
     std::mutex KeysHeldLock;
     std::thread KeySenderThread;
     bool RunningKeySender;
-    bool ShiftDown;
 
     // Focus
     bool Focused;
@@ -152,6 +153,8 @@ public:
 
     bool SendKeys(std::string Text, std::int32_t KeyWait, std::int32_t KeyModWait);
 
+    std::int32_t GetKeysModifiers();
+
     // Focus
     bool IsFocused();
 
@@ -175,6 +178,8 @@ public:
     bool ClickMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType);
 
     bool ScrollMouse(std::int32_t X, std::int32_t Y, std::int32_t Lines);
+
+    std::int32_t GetMouseModifiers(std::int32_t Button = -1);
 
     ~PInput();
 };

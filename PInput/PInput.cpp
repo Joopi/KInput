@@ -143,6 +143,17 @@ std::uint16_t ToChar(std::int32_t KeyCode, bool Shift)
 }
 
 /**
+ * Uppercases a char when Shift is true. Else just returns the char.
+ * @param Char The character.
+ * @param Shift Whether shift is pressed or not.
+ * @return The regular char, or the uppercased version of it incase Shift is true.
+ */
+std::uint16_t ShiftToUpper(char Char, bool Shift)
+{
+    return static_cast<uint16_t>(static_cast<int16_t>(Shift ? std::toupper((char) Char) : Char));
+}
+
+/**
  * Returns true if the key code is type-able
  */
 bool IsKeyCodeTypeable(std::int32_t KeyCode)
@@ -164,7 +175,7 @@ bool RequiresShift(char c)
 void ReplaceJavaEnter(std::int32_t *KeyCode)
 {
     // Java uses VK_ENTER = 10
-    if (*KeyCode == 13)
+    if (*KeyCode == VK_RETURN)
     {
         *KeyCode = 10;
     }
@@ -180,8 +191,6 @@ PInput::PInput(DWORD PID, std::string &Path)
     this->KeysHeld = std::set<HeldKey>();
     this->RunningKeySender = true;
     this->KeySenderThread = std::thread(&PInput::KeySenderRun, this);
-    this->ShiftDown = false;
-    std::mutex KeysHeldLock;
     this->Focused = false;
     this->LeftDown = false;
     this->MidDown = false;
@@ -228,17 +237,12 @@ bool PInput::KeyDown(std::int32_t KeyCode)
     HeldKey KeyHeld(KeyCode, StartTime & 0xFFFFFFFF);
     if (!this->IsKeyDown(KeyCode))
     {
-        if (VK_SHIFT == KeyCode)
-        {
-            this->ShiftDown = true;
-        }
-
-        KInput->KeyEvent(KEY_PRESSED, StartTime, ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
+        this->SetKeyDown(KeyHeld, true);
+        KInput->KeyEvent(KEY_PRESSED, StartTime, GetKeysModifiers(), KeyCode, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_STANDARD);
         if (IsKeyCodeTypeable(KeyCode))
         {
-            KInput->KeyEvent(KEY_TYPED, StartTime, ShiftDown ? SHIFT_DOWN_MASK : 0, 0, ToChar(KeyCode, ShiftDown), KEY_LOCATION_UNKNOWN);
+            KInput->KeyEvent(KEY_TYPED, StartTime, GetKeysModifiers(), 0, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_UNKNOWN);
         }
-        this->SetKeyDown(KeyHeld, true);
         return true;
     }
     return false;
@@ -255,11 +259,7 @@ bool PInput::KeyUp(std::int32_t KeyCode)
     if (IsKeyDown(KeyCode))
     {
         SetKeyDown(KeyHeld, false);
-        KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
-        if (VK_SHIFT == KeyCode)
-        {
-            ShiftDown = false;
-        }
+        KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), GetKeysModifiers(), KeyCode, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_STANDARD);
         return true;
     }
     return false;
@@ -276,10 +276,10 @@ void PInput::KeySenderRun()
         {
             if (KeyHeld.getSentTime() < RepeatDelay)
             {
-                KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyHeld.getKeyCode(), ToChar(KeyHeld.getKeyCode(), ShiftDown), KEY_LOCATION_STANDARD);
+                KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), GetKeysModifiers(), KeyHeld.getKeyCode(), ToChar(KeyHeld.getKeyCode(), IsKeyDown(VK_SHIFT)), KEY_LOCATION_STANDARD);
                 if (IsKeyCodeTypeable(KeyHeld.getKeyCode()))
                 {
-                    KInput->KeyEvent(KEY_TYPED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, 0, ToChar(KeyHeld.getKeyCode(), ShiftDown), KEY_LOCATION_UNKNOWN);
+                    KInput->KeyEvent(KEY_TYPED, CurrentTimeMillis(), GetKeysModifiers(), 0, ToChar(KeyHeld.getKeyCode(), IsKeyDown(VK_SHIFT)), KEY_LOCATION_UNKNOWN);
                 }
             }
         }
@@ -298,12 +298,12 @@ bool PInput::PressKey(std::int32_t KeyCode)
     }
     ReplaceJavaEnter(&KeyCode);
     // Craft the order of events
-    this->KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
+    this->KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), GetKeysModifiers(), KeyCode, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_STANDARD);
     // 0 between the pressed and typed
-    this->KInput->KeyEvent(KEY_TYPED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, 0, ToChar(KeyCode, ShiftDown), KEY_LOCATION_UNKNOWN);
+    this->KInput->KeyEvent(KEY_TYPED, CurrentTimeMillis(), GetKeysModifiers(), 0, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_UNKNOWN);
     // Random human release time
     std::this_thread::sleep_for(std::chrono::milliseconds(Random(45, 96)));
-    this->KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
+    this->KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), GetKeysModifiers(), KeyCode, ToChar(KeyCode, IsKeyDown(VK_SHIFT)), KEY_LOCATION_STANDARD);
     return true;
 }
 
@@ -311,6 +311,18 @@ std::int32_t WeirdRandom(std::int32_t Base)
 {
     std::uniform_real_distribution<double> distribution(0, 1);
     return static_cast<std::int32_t>(((distribution(generator) * 0.1 + 1) * Base));
+}
+
+std::int32_t PInput::GetKeysModifiers()
+{
+    std::uint32_t Result = 0;
+    if (IsKeyDown(VK_SHIFT))
+        Result |= SHIFT_DOWN_MASK;
+    if (IsKeyDown(VK_CONTROL))
+        Result |= CTRL_DOWN_MASK;
+    if (IsKeyDown(VK_ALT))
+        Result |= ALT_DOWN_MASK;
+    return Result;
 }
 
 bool PInput::SendKeys(std::string Text, std::int32_t KeyWait, std::int32_t KeyModWait)
@@ -327,24 +339,30 @@ bool PInput::SendKeys(std::string Text, std::int32_t KeyWait, std::int32_t KeyMo
         auto KeyLocation = isdigit(Char) ? (distribution(generator) > 0.5 ? KEY_LOCATION_NUMPAD : KEY_LOCATION_STANDARD) : KEY_LOCATION_STANDARD;
         if (RequiresShift(Char))
         {
+            auto KeyMask = GetKeysModifiers() | SHIFT_DOWN_MASK;
             auto ShiftLocation = distribution(generator) > 0.5 ? KEY_LOCATION_RIGHT : KEY_LOCATION_LEFT;
-            KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), SHIFT_MASK, VK_SHIFT, CHAR_UNDEFINED, ShiftLocation);
-            std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyModWait)));
+            if (!IsKeyDown(VK_SHIFT)) {
+                KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), KeyMask, VK_SHIFT, CHAR_UNDEFINED, ShiftLocation);
+                std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyModWait)));
+            }
             auto Time = CurrentTimeMillis();
-            KInput->KeyEvent(KEY_PRESSED, Time, SHIFT_MASK, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
-            KInput->KeyEvent(KEY_TYPED, Time, SHIFT_MASK, 0, static_cast<uint16_t>(Char), KEY_LOCATION_UNKNOWN);
+            KInput->KeyEvent(KEY_PRESSED, Time, KeyMask, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
+            KInput->KeyEvent(KEY_TYPED, Time, KeyMask, 0, static_cast<uint16_t>(Char), KEY_LOCATION_UNKNOWN);
             std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyWait)));
-            KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), SHIFT_MASK, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
-            std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyModWait)));
-            KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), 0, VK_SHIFT, CHAR_UNDEFINED, ShiftLocation);
+            KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), KeyMask, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
+            if (!IsKeyDown(VK_SHIFT)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyModWait)));
+                KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), GetKeysModifiers(), VK_SHIFT, CHAR_UNDEFINED, ShiftLocation);
+            }
         }
         else
         {
             auto Time = CurrentTimeMillis();
-            KInput->KeyEvent(KEY_PRESSED, Time, 0, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
-            KInput->KeyEvent(KEY_TYPED, Time, 0, 0, static_cast<uint16_t>(Char), KEY_LOCATION_UNKNOWN);
+            auto KeyMask = GetKeysModifiers();
+            KInput->KeyEvent(KEY_PRESSED, Time, KeyMask, KeyCode, ShiftToUpper(Char, IsKeyDown(VK_SHIFT)), KeyLocation);
+            KInput->KeyEvent(KEY_TYPED, Time, KeyMask, 0, ShiftToUpper(Char, IsKeyDown(VK_SHIFT)), KEY_LOCATION_UNKNOWN);
             std::this_thread::sleep_for(std::chrono::milliseconds(WeirdRandom(KeyWait)));
-            KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), 0, KeyCode, static_cast<uint16_t>(Char), KeyLocation);
+            KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), KeyMask, KeyCode, ShiftToUpper(Char, IsKeyDown(VK_SHIFT)), KeyLocation);
         }
     }
     return true;
@@ -422,7 +440,15 @@ bool PInput::IsDragging()
 
 bool PInput::MoveMouse(std::int32_t X, std::int32_t Y)
 {
-    int ButtonMask = (LeftDown ? BUTTON1_DOWN_MASK : 0) | (RightDown ? (BUTTON3_DOWN_MASK | META_DOWN_MASK) : 0);
+    int Button = -1;
+    if (LeftDown)
+        Button = 1;
+    else if (MidDown)
+        Button = 2;
+    else if (RightDown) {
+        Button = 3;
+    }
+    auto ButtonMask = GetMouseModifiers(Button);
     if (IsDragging())
     {
         KInput->MouseEvent(MOUSE_DRAGGED, CurrentTimeMillis(), ButtonMask, X, Y, 0, false, 0);
@@ -442,7 +468,6 @@ bool PInput::HoldMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
     {
         // Since IsMouseButtonDown performs the translation as well we can only translate in here
         ClickType = MouseTranslation[ClickType];
-        int ButtonMask = ((LeftDown || ClickType == 1) ? BUTTON1_DOWN_MASK : 0) | ((MidDown || ClickType == 2) ? (BUTTON2_DOWN_MASK | META_DOWN_MASK) : 0) | ((RightDown || ClickType == 3) ? (BUTTON3_DOWN_MASK | META_DOWN_MASK) : 0);
         int Button = 0;
         switch (ClickType)
         {
@@ -457,6 +482,7 @@ bool PInput::HoldMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
                 break;
         }
         MoveMouse(X, Y);
+        int ButtonMask = GetMouseModifiers(Button);
         KInput->MouseEvent(MOUSE_PRESSED, CurrentTimeMillis(), ButtonMask, this->X, this->Y, 1, false, Button);
         if (!IsFocused())
         {
@@ -486,7 +512,6 @@ bool PInput::ReleaseMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType
     {
         // Since IsMouseButtonDown performs the translation as well we can only translate in here
         ClickType = MouseTranslation[ClickType];
-        int ButtonMask = ((LeftDown || ClickType == 1) ? BUTTON1_DOWN_MASK : 0) | ((MidDown || ClickType == 2) ? (BUTTON2_DOWN_MASK | META_DOWN_MASK) : 0) | ((RightDown || ClickType == 3) ? (BUTTON3_DOWN_MASK | META_DOWN_MASK) : 0);
         int Button = 0;
         switch (ClickType)
         {
@@ -502,6 +527,7 @@ bool PInput::ReleaseMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType
         }
         MoveMouse(X, Y);
         std::uint64_t Time = CurrentTimeMillis();
+        int ButtonMask = GetMouseModifiers(Button);
         KInput->MouseEvent(MOUSE_RELEASED, Time, ButtonMask, this->X, this->Y, 1, false, Button);
         KInput->MouseEvent(MOUSE_CLICKED, Time, ButtonMask, this->X, this->Y, 1, false, Button);
         switch (ClickType)
@@ -527,7 +553,6 @@ bool PInput::ClickMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
     {
         // Since IsMouseButtonDown performs the translation as well we can only translate in here
         ClickType = MouseTranslation[ClickType];
-        int ButtonMask = ((LeftDown || ClickType == 1) ? BUTTON1_DOWN_MASK : 0) | ((MidDown || ClickType == 2) ? (BUTTON2_DOWN_MASK | META_DOWN_MASK) : 0) | ((RightDown || ClickType == 3) ? (BUTTON3_DOWN_MASK | META_DOWN_MASK) : 0);
         int Button = 0;
         switch (ClickType)
         {
@@ -542,6 +567,7 @@ bool PInput::ClickMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
                 break;
         }
         MoveMouse(X, Y);
+        int ButtonMask = GetMouseModifiers(Button);
         KInput->MouseEvent(MOUSE_PRESSED, CurrentTimeMillis(), ButtonMask, this->X, this->Y, 1, false, Button);
         switch (ClickType)
         {
@@ -584,10 +610,25 @@ bool PInput::ClickMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
 
 bool PInput::ScrollMouse(std::int32_t X, std::int32_t Y, std::int32_t Lines)
 {
-    int ButtonMask = (IsKeyDown(VK_SHIFT) ? SHIFT_MASK : 0) | (IsKeyDown(VK_ALT) ? ALT_MASK : 0) | (IsKeyDown(VK_CONTROL) ? CTRL_MASK : 0);
+    int ButtonMask = GetMouseModifiers();
     MoveMouse(X, Y);
     KInput->MouseWheelEvent(MOUSE_WHEEL, CurrentTimeMillis(), ButtonMask, X, Y, 0, false, WHEEL_UNIT_SCROLL, abs(Lines), Lines < 0 ? -1 : 1);
     return true;
+}
+
+std::int32_t PInput::GetMouseModifiers(std::int32_t Button)
+{
+    std::uint32_t Result = 0;
+    if (IsKeyDown(VK_SHIFT))
+        Result |= SHIFT_MASK;
+    if (IsKeyDown(VK_CONTROL))
+        Result |= CTRL_MASK;
+    if (IsKeyDown(VK_ALT))
+        Result |= ALT_MASK;
+    // Shift in-case the Button is specified. Credits <Kasi Reddy>
+    if (Button > 0)
+        return Result | (1 << (4 - (Button - 1)));
+    return Result;
 }
 
 PInput::~PInput()
