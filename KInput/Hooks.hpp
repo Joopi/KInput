@@ -15,15 +15,15 @@ extern KInput *Input;
 
 #define SD_RASINFO_PRIVATE_SIZE 64
 
-typedef struct
+struct SurfaceDataBounds
 {
     jint x1;
     jint y1;
     jint x2;
     jint y2;
-} SurfaceDataBounds;
+};
 
-typedef struct
+struct SurfaceDataRasInfo
 {
     SurfaceDataBounds bounds;                 /* bounds of raster array */
     void *rasBase;               /* Pointer to (0, 0) pixel */
@@ -42,7 +42,7 @@ typedef struct
         void *align;                 /* ensures strict alignment */
         char data[SD_RASINFO_PRIVATE_SIZE];
     } priv;
-} SurfaceDataRasInfo;
+};
 
 /**
  * OpenGL render (For RuneLite)

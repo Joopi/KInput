@@ -11,7 +11,7 @@ AR = ar.exe
 LD = g++.exe
 WINDRES = windres.exe
 
-INC =
+INC = -I"..\Shared"
 CFLAGS =
 RESINC =
 LIBDIR =
@@ -25,9 +25,10 @@ RCFLAGS_RELEASE = $(RCFLAGS)
 LIBDIR_RELEASE = $(LIBDIR)
 LIB_RELEASE = $(LIB)
 LDFLAGS_RELEASE = PInput.def $(LDFLAGS) -s -static-libstdc++ -static-libgcc -static -m32 -mwindows
-OBJDIR_RELEASE = obj\\Release
+OBJDIR_RELEASE = obj
 DEP_RELEASE =
-OUT_RELEASE = bin\\Release\\PInput.dll
+OUTDIR_RELEASE = bin
+OUT_RELEASE = $(OUTDIR_RELEASE)\\PInput.dll
 
 OBJ_RELEASE = $(OBJDIR_RELEASE)\\Injector.o $(OBJDIR_RELEASE)\\KInputCtrl.o $(OBJDIR_RELEASE)\\PInput.o $(OBJDIR_RELEASE)\\main.o
 
@@ -36,7 +37,7 @@ all: release
 clean: clean_release
 
 before_release:
-	cmd /c if not exist bin\\Release md bin\\Release
+	cmd /c if not exist $(OUTDIR_RELEASE) md $(OUTDIR_RELEASE)
 	cmd /c if not exist $(OBJDIR_RELEASE) md $(OBJDIR_RELEASE)
 
 after_release:
@@ -59,9 +60,7 @@ $(OBJDIR_RELEASE)\\main.o: main.cpp
 	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c main.cpp -o $(OBJDIR_RELEASE)\\main.o
 
 clean_release:
-	cmd /c del /f $(OBJ_RELEASE) $(OUT_RELEASE)
-	cmd /c rd bin\\Release
-	cmd /c rd $(OBJDIR_RELEASE)
+	cmd /c rd /s /q $(OBJDIR_RELEASE) $(OUTDIR_RELEASE)
 
 .PHONY: before_release after_release clean_release
 

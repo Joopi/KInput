@@ -6,25 +6,10 @@
 #include <cstdint>
 #include <mutex>
 #include <condition_variable>
+#include "../Shared/Definitions.h"
 
 typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
 typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
-
-union BGRA { // Contains pixel info in BGRA format
-    struct { char B, G, R, A; };
-    unsigned int Color;
-};
-
-struct ClientSurfaceInfo {
-    int Width = -1;
-    int Height = -1;
-    const BGRA *PixelBuffer = nullptr; // Contains pixel info in BGRA format
-
-public:
-    std::int64_t GetPixelBufferSize() {
-        return Width * Height * sizeof(BGRA);
-    }
-};
 
 class KInput
 {

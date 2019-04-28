@@ -23,58 +23,7 @@ Injector::Injector(DWORD PID) : PID(PID), ProcessHandle(nullptr)
     this->ProcessHandle = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, PID);
 }
 
-void* Injector::GetRemoteProcAddress(void* DLL, std::string ProcName)
-{
-    void* Result = nullptr;
-    if ((!DLL) || (!this->ProcessHandle))
-        return Result;
-    void* GetProcAddr = (void*)GetProcAddress(GetModuleHandle("Kernel32.dll"), "GetProcAddress");
-    void* RemoteParam = VirtualAllocEx(this->ProcessHandle, nullptr, sizeof(char) * (ProcName.size() + 1), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    void* RemoteResult = VirtualAllocEx(this->ProcessHandle, nullptr, sizeof(unsigned long), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (RemoteParam && RemoteResult)
-    {
-        if (WriteProcessMemory(this->ProcessHandle, RemoteParam, ProcName.c_str(), sizeof(char) * (ProcName.size() + 1), nullptr))
-        {
-            unsigned char RemoteThreadBuffer[27] =
-            {
-                0x68, 0x00, 0x00, 0x00, 0x00,
-                0x68, 0x00, 0x00, 0x00, 0x00,
-                0xB8, 0x00, 0x00, 0x00, 0x00,
-                0xFF, 0xD0,
-                0xA3, 0x00, 0x00, 0x00, 0x00,
-                0x33, 0xC0,
-                0xC2, 0x08, 0x00
-            };
-            *(unsigned long*)(RemoteThreadBuffer + 0x01) = (unsigned long)RemoteParam;
-            *(unsigned long*)(RemoteThreadBuffer + 0x06) = (unsigned long)DLL;
-            *(unsigned long*)(RemoteThreadBuffer + 0x0B) = (unsigned long)GetProcAddr;
-            *(unsigned long*)(RemoteThreadBuffer + 0x12) = (unsigned long)RemoteResult;
-            void* RemoteBuffer = VirtualAllocEx(this->ProcessHandle, nullptr, sizeof(RemoteThreadBuffer), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-            if (RemoteBuffer)
-            {
-                if (WriteProcessMemory(this->ProcessHandle, RemoteBuffer, RemoteThreadBuffer, sizeof(RemoteThreadBuffer), nullptr))
-                {
-                    HANDLE RemoteThread = CreateRemoteThread(this->ProcessHandle, nullptr, 0, (LPTHREAD_START_ROUTINE)RemoteBuffer, 0, 0, nullptr);
-                    if (RemoteThread)
-                    {
-                        WaitForSingleObject(RemoteThread, INFINITE);
-                        if (GetExitCodeThread(RemoteThread, (LPDWORD)&Result) != STILL_ACTIVE)
-                            ReadProcessMemory(this->ProcessHandle, RemoteResult, &Result, sizeof(std::uint32_t), nullptr);
-                        CloseHandle(RemoteThread);
-                    }
-                }
-                VirtualFreeEx(this->ProcessHandle, RemoteBuffer, 0, MEM_RELEASE);
-            }
-        }
-    }
-    if (RemoteParam)
-        VirtualFreeEx(this->ProcessHandle, RemoteParam, 0, MEM_RELEASE);
-    if (RemoteResult)
-        VirtualFreeEx(this->ProcessHandle, RemoteResult, 0, MEM_RELEASE);
-    return Result;
-}
-
-void* Injector::Load(std::string DLLPath)
+void* Injector::Load(const std::string& DLLPath)
 {
     void* Result = nullptr;
     if (!this->ProcessHandle)
@@ -111,64 +60,7 @@ void* Injector::Load(std::string DLLPath)
     return Result;
 }
 
-bool Injector::CallExport(std::string DLLPath, std::string ProcName, void* Data, std::uint32_t Size)
-{
-    bool Result = false;
-    if (!this->ProcessHandle)
-        return Result;
-    if (!Modules.count(DLLPath))
-        return Result;
-    void* DLL = Modules[DLLPath];
-    return this->CallExport(DLL, ProcName, Data, Size);
-}
-
-bool Injector::CallExport(void* DLL, std::string ProcName, void* Data, std::uint32_t Size)
-{
-    bool Result = false;
-    if (!DLL)
-        return Result;
-    void* Func = GetRemoteProcAddress(DLL, ProcName);
-    if (Func)
-    {
-        void* DataEntry = VirtualAllocEx(this->ProcessHandle, nullptr, Size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-        if (DataEntry)
-        {
-            if (WriteProcessMemory(this->ProcessHandle, DataEntry, Data, Size, nullptr))
-            {
-                HANDLE RemoteThread = CreateRemoteThread(this->ProcessHandle, nullptr, 0, (LPTHREAD_START_ROUTINE)Func, DataEntry, 0, nullptr);
-                if (RemoteThread)
-                {
-                    WaitForSingleObject(RemoteThread, INFINITE);
-                    GetExitCodeThread(RemoteThread, (LPDWORD)&Result);
-                    CloseHandle(RemoteThread);
-                }
-            }
-            VirtualFreeEx(this->ProcessHandle, DataEntry, 0, MEM_RELEASE);
-        }
-    }
-    return Result;
-}
-
-DWORD Injector::CallExport(void* DLL, std::string ProcName)
-{
-    if (!DLL)
-        return 0;
-    DWORD Result = 0;
-    void* Func = GetRemoteProcAddress(DLL, ProcName);
-    if (Func)
-    {
-        HANDLE RemoteThread = CreateRemoteThread(this->ProcessHandle, nullptr, 0, (LPTHREAD_START_ROUTINE)Func, nullptr, 0, nullptr);
-        if (RemoteThread)
-        {
-            WaitForSingleObject(RemoteThread, INFINITE);
-            GetExitCodeThread(RemoteThread, &Result);
-            CloseHandle(RemoteThread);
-        }
-    }
-    return Result;
-}
-
-bool Injector::Free(std::string DLLPath)
+bool Injector::Free(const std::string& DLLPath)
 {
     bool Result = false;
     if (!this->ProcessHandle)

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) <2018>  <Kasi Reddy>
+    Copyright (C) <2018>  <Kasi Reddy> <Andre>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,64 +16,117 @@
 */
 
 #include <windows.h>
+#include <iostream>
 #include "KInputCtrl.hpp"
 
-KInputCtrl::KInputCtrl(DWORD PID, std::string Path) : Injector(PID)
+KInputCtrl::KInputCtrl(DWORD PID, const std::string& Path) : Injector(PID)
 {
     this->FileName = Path + "\\KInput.dll";
     this->DLL = this->Load(FileName);
     this->SurfaceInfo = new ClientSurfaceInfo();
     this->CopiedPixelBufferSize = 0;
+
+    // Init the pipe name
+    auto PipeName = R"(\\.\pipe\)" + std::string(PIPE_PREFIX) + std::to_string(PID);
+
+    // Open the name pipe! Wait if necessary!
+    while (true)
+    {
+        this->Pipe = CreateFile(
+                PipeName.c_str(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                nullptr,
+                OPEN_EXISTING,
+                0,
+                nullptr);
+
+        // Break if the pipe handle is valid.
+        if (this->Pipe != INVALID_HANDLE_VALUE)
+            break;
+
+        // Exit if an error other than ERROR_PIPE_BUSY occurs.
+        if (GetLastError() != ERROR_PIPE_BUSY)
+        {
+            std::cerr << "Could not open pipe" << std::endl;
+        }
+
+        // All pipe instances are busy, so wait for 20 seconds.
+        if (!WaitNamedPipe(PipeName.c_str(), 20000))
+        {
+            std::cerr << "Could not open pipe: 20 second wait timed out." << std::endl;
+            return;
+        }
+    }
+
+    // The pipe is connected, change the read mode to message
+    DWORD PipeMode = PIPE_READMODE_MESSAGE;
+    bool Success = SetNamedPipeHandleState(this->Pipe, &PipeMode, nullptr, nullptr);
+    if (!Success)
+    {
+        std::cerr << "Failed to set pipe state." << std::endl;
+        return;
+    }
+    std::cout << "Connected to the PIPE!!!!" << std::endl;
+}
+
+bool KInputCtrl::PerformRequest(char CommandId, void *Arguments, size_t ArgumentsSize, void *Return, size_t ReturnSize)
+{
+    // Send the event!
+    DWORD BytesWritten;
+    DWORD MessageSize = ArgumentsSize + 1;
+    void *MessageBytes = malloc(MessageSize);
+    *((char*) MessageBytes) = CommandId;
+    if (Arguments != nullptr && ArgumentsSize > 0) {
+        memcpy((void *) (((char*) MessageBytes) + 1), Arguments, ArgumentsSize);
+    }
+    bool Success = WriteFile(this->Pipe, (void *) MessageBytes, MessageSize, &BytesWritten, nullptr);
+    free(MessageBytes);
+    if (!Success || BytesWritten != MessageSize) {
+        std::cerr << "Failed to send message to pipe!" << std::endl;
+        return false;
+    }
+
+    // If it is a void we don't need to read for any reply
+    if (ReturnSize == 0 || Return == nullptr)
+        return true;
+
+    // Read the reply
+    DWORD BytesRead;
+    auto Connected = ReadFile(this->Pipe, (void *) Return, ReturnSize, &BytesRead, nullptr);
+    return Connected && BytesRead == ReturnSize;
 }
 
 bool KInputCtrl::FocusEvent(std::int32_t ID)
 {
-    struct FocusEvent
-    {
-        std::int32_t ID;
-    };
-    FocusEvent Event{};
+    struct FocusEvent Event{};
     Event.ID = ID;
-    return this->CallExport(this->DLL, "KInput_FocusEvent", &Event, sizeof(Event));
+
+    // Perform the request
+    bool Reply;
+    return PerformRequest(FOCUS_EVENT_COMMAND, &Event, sizeof(Event), &Reply, sizeof(bool)) && Reply;
 }
 
 bool KInputCtrl::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t KeyCode,
                           std::uint16_t KeyChar, std::int32_t KeyLocation)
 {
-    struct KeyEvent
-    {
-        std::int32_t ID;
-        std::int64_t When;
-        std::int32_t Modifiers;
-        std::int32_t KeyCode;
-        std::uint16_t KeyChar;
-        std::int32_t KeyLocation;
-    };
-    KeyEvent Event{};
+    struct KeyEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
     Event.KeyCode = KeyCode;
     Event.KeyChar = KeyChar;
     Event.KeyLocation = KeyLocation;
-    return this->CallExport(this->DLL, "KInput_KeyEvent", &Event, sizeof(Event));
+
+    // Perform the request
+    bool Reply;
+    return PerformRequest(KEY_EVENT_COMMAND, &Event, sizeof(Event), &Reply, sizeof(bool)) && Reply;
 }
 
 bool KInputCtrl::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
                             std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t Button)
 {
-    struct MouseEvent
-    {
-        std::int32_t ID;
-        std::int64_t When;
-        std::int32_t Modifiers;
-        std::int32_t X;
-        std::int32_t Y;
-        std::int32_t ClickCount;
-        bool PopupTrigger;
-        std::int32_t Button;
-    };
-    MouseEvent Event{};
+    struct MouseEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
@@ -82,27 +135,17 @@ bool KInputCtrl::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Mod
     Event.ClickCount = ClickCount;
     Event.PopupTrigger = PopupTrigger;
     Event.Button = Button;
-    return this->CallExport(this->DLL, "KInput_MouseEvent", &Event, sizeof(Event));
+
+    // Perform the request
+    bool Reply;
+    return PerformRequest(MOUSE_EVENT_COMMAND, &Event, sizeof(Event), &Reply, sizeof(bool)) && Reply;
 }
 
 bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
                                  std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                                  std::int32_t ScrollAmount, std::int32_t WheelRotation)
 {
-    struct MouseWheelEvent
-    {
-        std::int32_t ID;
-        std::int64_t When;
-        std::int32_t Modifiers;
-        std::int32_t X;
-        std::int32_t Y;
-        std::int32_t ClickCount;
-        bool PopupTrigger;
-        std::int32_t ScrollType;
-        std::int32_t ScrollAmount;
-        std::int32_t WheelRotation;
-    };
-    MouseWheelEvent Event{};
+    struct MouseWheelEvent Event{};
     Event.ID = ID;
     Event.When = When;
     Event.Modifiers = Modifiers;
@@ -113,19 +156,27 @@ bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_
     Event.ScrollType = ScrollType;
     Event.ScrollAmount = ScrollAmount;
     Event.WheelRotation = WheelRotation;
-    return this->CallExport(this->DLL, "KInput_MouseWheelEvent", &Event, sizeof(Event));
+
+    // Perform the request
+    bool Reply;
+    return PerformRequest(MOUSE_WHEEL_EVENT_COMMAND, &Event, sizeof(Event), &Reply, sizeof(bool)) && Reply;
 }
 
 void KInputCtrl::UpdateClientSurfaceInfo(bool CopyPixelBuffer)
 {
-    void* RemoteSurfaceInfoAddress = reinterpret_cast<void *>(this->CallExport(this->DLL, "KInput_GetClientSurfaceInfo"));
-    if (!RemoteSurfaceInfoAddress) {
-        return;
+    // Request for an update and wait for the next frame (If copying from it)!
+    if (CopyPixelBuffer) {
+        bool Requested;
+        auto Success = PerformRequest(REQUEST_PIXEL_BUFFER_COMMAND, nullptr, 0, &Requested, sizeof(bool));
+        if (!Success || !Requested) {
+            return;
+        }
     }
 
     // Read the SurfaceInfo from KInput
-    ClientSurfaceInfo RemoteClientSurfaceInfo{};
-    if (!ReadProcessMemory(this->ProcessHandle, (LPCVOID) RemoteSurfaceInfoAddress, &RemoteClientSurfaceInfo, sizeof(ClientSurfaceInfo), nullptr)) {
+    ClientSurfaceInfo RemoteClientSurfaceInfo;
+    auto Success = PerformRequest(GET_SURFACE_INFO_COMMAND, nullptr, 0, &RemoteClientSurfaceInfo, sizeof(ClientSurfaceInfo));
+    if (!Success) {
         return;
     }
 
@@ -144,15 +195,10 @@ void KInputCtrl::UpdateClientSurfaceInfo(bool CopyPixelBuffer)
         // Update the copied buffer size
         CopiedPixelBufferSize = RemoteClientSurfaceInfo.GetPixelBufferSize();
 
-        // Request for an update and wait for the next frame!
-        bool Requested = this->CallExport(this->DLL, "KInput_RequestPixelBufferUpdate");
-        if (!Requested)
-        {
-            return;
-        }
-
         // Read the remote pixel buffer into the local pixel buffer
-        ReadProcessMemory(this->ProcessHandle, RemoteClientSurfaceInfo.PixelBuffer, (void*) this->SurfaceInfo->PixelBuffer, RemoteClientSurfaceInfo.GetPixelBufferSize(), nullptr);
+        if (RemoteClientSurfaceInfo.PixelBuffer) {
+            ReadProcessMemory(this->ProcessHandle, RemoteClientSurfaceInfo.PixelBuffer, (void*) this->SurfaceInfo->PixelBuffer, RemoteClientSurfaceInfo.GetPixelBufferSize(), nullptr);
+        }
     }
 }
 
@@ -165,5 +211,6 @@ KInputCtrl::~KInputCtrl()
 {
     delete this->SurfaceInfo->PixelBuffer;
     delete this->SurfaceInfo;
+    CloseHandle(this->Pipe);
     this->Free(this->FileName);
 }
