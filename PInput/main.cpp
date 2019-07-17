@@ -269,6 +269,7 @@ Target EIOS_RequestTarget(char *initargs) {
     if (initargs != nullptr && strlen(initargs) > 0) {
         auto pid = static_cast<DWORD>(strtol(initargs, nullptr, 10));
         if (PInput_Create(pid)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             return pid;
         }
     }
