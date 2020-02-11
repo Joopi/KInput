@@ -33,7 +33,7 @@ static BOOL CALLBACK GetHWNDCurrentPID(HWND WindowHandle, LPARAM lParam)
 
 HWND GetCanvasHWND()
 {
-    HWND CanvasHandle = 0;
+    HWND CanvasHandle = nullptr;
     std::vector<HWND> OSRSWindows;
     EnumWindows(GetHWNDCurrentPID, reinterpret_cast<LPARAM>(&OSRSWindows));
     if (OSRSWindows.size() > 0)
@@ -136,6 +136,44 @@ void KInput::NotifyCanvasUpdate(HWND CanvasHWND)
     this->CanvasUpdate = CanvasHWND;
 }
 
+void KInput::UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer)
+{
+    this->SurfaceInfo->Width = Width;
+    this->SurfaceInfo->Height = Height;
+
+    // If someone is waiting for a pixel buffer update, do IT!
+    if (this->ShouldUpdatePixelBuffer) {
+        size_t PixelCount = Width * Height * sizeof(BGRA);
+        // Allocate new memory or resize the existing one in-case the pixel buffer is bigger!
+        if (this->SurfaceInfo->PixelBuffer == nullptr) {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(malloc(PixelCount));
+        } else if (CopiedPixelBufferSize != PixelCount)
+        {
+            this->SurfaceInfo->PixelBuffer = static_cast<const BGRA *>(realloc((void*) this->SurfaceInfo->PixelBuffer, PixelCount));
+        }
+        // Update the copied buffer size
+        CopiedPixelBufferSize = PixelCount;
+
+        // Copy the buffer to our safe location
+        memcpy((void *) this->SurfaceInfo->PixelBuffer, PixelBuffer, PixelCount);
+        this->ShouldUpdatePixelBuffer = false;
+        OnFrameUpdate.notify_all();
+    }
+}
+
+bool KInput::RequestPixelBufferUpdate()
+{
+    std::unique_lock<std::mutex> Lock(OnFrameUpdateMutex);
+    this->ShouldUpdatePixelBuffer = true;
+    OnFrameUpdate.wait(Lock, [&]{return !this->ShouldUpdatePixelBuffer;});
+    return true;
+}
+
+ClientSurfaceInfo *KInput::GetClientSurfaceInfo()
+{
+    return this->SurfaceInfo;
+}
+
 void KInput::UpdateCanvas(JNIEnv* Thread)
 {
     if (!CanvasUpdate)
@@ -183,14 +221,18 @@ KInput::KInput()
     this->MouseWheelEvent_Class = nullptr;
     this->MouseWheelEvent_Init = nullptr;
     this->CanvasUpdate = nullptr;
+    this->SurfaceInfo = new struct ClientSurfaceInfo();
+    this->ShouldUpdatePixelBuffer = false;
+    this->CopiedPixelBufferSize = 0;
     this->GrabCanvas();
 }
 
 bool KInput::AttachThread(JNIEnv** Thread)
 {
+    static const JavaVMAttachArgs Args = {JNI_VERSION_1_6, (char*)"AWT-EventQueue-0", nullptr};
     if (this->JVM)
         if (this->JVM->GetEnv((void**)Thread, JNI_VERSION_1_6) == JNI_EDETACHED)
-            this->JVM->AttachCurrentThread((void**)Thread, nullptr);
+            this->JVM->AttachCurrentThread((void**)Thread, (void*)&Args);
     return (*Thread);
 }
 
@@ -423,4 +465,6 @@ KInput::~KInput()
         }
         this->DetachThread(&Thread);
     }
+    delete this->SurfaceInfo->PixelBuffer;
+    delete this->SurfaceInfo;
 }

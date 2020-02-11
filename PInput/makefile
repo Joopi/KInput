@@ -11,55 +11,55 @@ AR = ar.exe
 LD = g++.exe
 WINDRES = windres.exe
 
-INC = -I"minhook\include" -I"..\Shared"
-CFLAGS = 
-RESINC = 
-LIBDIR = -L"minhook\lib"
-LIB = -l"MinHook"
+INC = -I"..\Shared"
+CFLAGS =
+RESINC =
+LIBDIR =
+LIB =
 LDFLAGS =
 
-INC_RELEASE = $(INC) -I"C:\Program Files (x86)\Java\jdk1.8.0_171\include" -I"C:\Program Files (x86)\Java\jdk1.8.0_171\include\win32"
-CFLAGS_RELEASE = $(CFLAGS) -Os -Wall -std=c++1z -m32 -DBUILD_DLL -DDEBUG
+INC_RELEASE = $(INC)
+CFLAGS_RELEASE = $(CFLAGS) -O2 -Wall -std=c++1z -m32 -DBUILD_DLL
 RESINC_RELEASE = $(RESINC)
 RCFLAGS_RELEASE = $(RCFLAGS)
 LIBDIR_RELEASE = $(LIBDIR)
 LIB_RELEASE = $(LIB)
-LDFLAGS_RELEASE = $(LDFLAGS) -s -static-libstdc++ -static-libgcc -static -m32
+LDFLAGS_RELEASE = PInput.def $(LDFLAGS) -s -static-libstdc++ -static-libgcc -static -m32 -mwindows
 OBJDIR_RELEASE = obj
 DEP_RELEASE =
 OUTDIR_RELEASE = bin
-OUT_RELEASE = $(OUTDIR_RELEASE)\\KInput.dll
+OUT_RELEASE = $(OUTDIR_RELEASE)\\PInput.dll
 
-OBJ_RELEASE = $(OBJDIR_RELEASE)\\KInputControllerListener.o $(OBJDIR_RELEASE)\\Hooks.o $(OBJDIR_RELEASE)\\KInput.o $(OBJDIR_RELEASE)\\main.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)\\Injector.o $(OBJDIR_RELEASE)\\KInputCtrl.o $(OBJDIR_RELEASE)\\PInput.o $(OBJDIR_RELEASE)\\main.o
 
 all: release
 
 clean: clean_release
 
-before_release: 
+before_release:
 	cmd /c if not exist $(OUTDIR_RELEASE) md $(OUTDIR_RELEASE)
 	cmd /c if not exist $(OBJDIR_RELEASE) md $(OBJDIR_RELEASE)
 
-after_release: 
+after_release:
 
 release: before_release out_release after_release
 
 out_release: before_release $(OBJ_RELEASE) $(DEP_RELEASE)
 	$(LD) -shared $(LIBDIR_RELEASE) $(OBJ_RELEASE)  -o $(OUT_RELEASE) $(LDFLAGS_RELEASE) $(LIB_RELEASE)
 
-$(OBJDIR_RELEASE)\\KInputControllerListener.o: KInputControllerListener.cpp
-	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c KInputControllerListener.cpp -o $(OBJDIR_RELEASE)\\KInputControllerListener.o
+$(OBJDIR_RELEASE)\\Injector.o: Injector.cpp
+	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c Injector.cpp -o $(OBJDIR_RELEASE)\\Injector.o
 
-$(OBJDIR_RELEASE)\\Hooks.o: Hooks.cpp
-	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c Hooks.cpp -o $(OBJDIR_RELEASE)\\Hooks.o
+$(OBJDIR_RELEASE)\\KInputCtrl.o: KInputCtrl.cpp
+	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c KInputCtrl.cpp -o $(OBJDIR_RELEASE)\\KInputCtrl.o
 
-$(OBJDIR_RELEASE)\\KInput.o: KInput.cpp
-	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c KInput.cpp -o $(OBJDIR_RELEASE)\\KInput.o
+$(OBJDIR_RELEASE)\\PInput.o: PInput.cpp
+	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c PInput.cpp -o $(OBJDIR_RELEASE)\\PInput.o
 
 $(OBJDIR_RELEASE)\\main.o: main.cpp
 	$(CXX) $(CFLAGS_RELEASE) $(INC_RELEASE) -c main.cpp -o $(OBJDIR_RELEASE)\\main.o
 
-clean_release: 
+clean_release:
 	cmd /c rd /s /q $(OBJDIR_RELEASE) $(OUTDIR_RELEASE)
 
 .PHONY: before_release after_release clean_release

@@ -5,6 +5,8 @@
 #include <jni.h>
 #include <cstdint>
 #include <mutex>
+#include <condition_variable>
+#include "../Shared/Definitions.h"
 
 typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
 typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
@@ -17,7 +19,7 @@ class KInput
         jobject Client;
         jobject Canvas;
 
-        ptr_GetComponent GetComponent;
+        ptr_GetComponent GetComponent{};
 
         jclass Canvas_Class;
         jmethodID Canvas_DispatchEvent;
@@ -35,6 +37,11 @@ class KInput
         jmethodID MouseWheelEvent_Init;
 
         HWND CanvasUpdate;
+        struct ClientSurfaceInfo *SurfaceInfo;
+        bool ShouldUpdatePixelBuffer;
+        size_t CopiedPixelBufferSize;
+        std::mutex OnFrameUpdateMutex;
+        std::condition_variable OnFrameUpdate;
 
         bool AttachThread(JNIEnv** Thread);
         bool DetachThread(JNIEnv** Thread);
@@ -53,6 +60,9 @@ class KInput
                              std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                              std::int32_t ScrollAmount, std::int32_t WheelRotation);
         void NotifyCanvasUpdate(HWND CanvasHWND);
+        void UpdateSurfaceInfo(int Width, int Height, const VOID *PixelBuffer);
+        bool RequestPixelBufferUpdate();
+        ClientSurfaceInfo *GetClientSurfaceInfo();
         ~KInput();
 };
 
